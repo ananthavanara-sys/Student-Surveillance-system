@@ -129,10 +129,29 @@ PYTHONPATH=. poetry run pytest src/tests/ -v
 
 ## 🛣️ Roadmap & Extensions
 
-- Database integrations (PostgreSQL) and ORM migrations
+- ✅ **Database integrations (PostgreSQL)** - COMPLETED! See `README_DATABASE.md`
+- ✅ **ORM migrations with Alembic** - COMPLETED!
 - Redis/RabbitMQ for caching and messaging
 - Multi-camera ingestion and load balancing
 - Expanded API/analytics test coverage and CI automation
+
+## 🗄️ Database Support
+
+**NEW:** The system now supports PostgreSQL database backend!
+
+- **See `README_DATABASE.md`** for complete database setup guide
+- **See `DATABASE_SETUP.md`** for advanced configuration and operations
+- **Migration tools** included to move from file-based to database storage
+
+Quick start with database:
+```bash
+# With Docker
+docker-compose up --build
+
+# Local setup
+poetry run python scripts/init_database.py
+poetry run python scripts/run_system.py
+```
 
 ## 📄 License
 

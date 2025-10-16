@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from src.app.dependencies import get_face_system
 from src.app.schemas import FaceResult, RecognitionResponse
 from src.app.utils import decode_image
-from src.face_system import FaceRecognitionSystem
+from src.face_system_db import FaceRecognitionSystemDB
 
 router = APIRouter(prefix="/recognize", tags=["recognition"])
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/recognize", tags=["recognition"])
 async def recognize_faces(
     file: UploadFile = File(...),
     threshold: float = 0.5,
-    face_system: FaceRecognitionSystem = Depends(get_face_system),
+    face_system: FaceRecognitionSystemDB = Depends(get_face_system),
 ) -> RecognitionResponse:
     """Recognize faces in the uploaded image."""
     if not file.content_type.startswith("image/"):

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from src.app.dependencies import get_face_system
 from src.app.utils import decode_image
-from src.face_system import FaceRecognitionSystem
+from src.face_system_db import FaceRecognitionSystemDB
 
 router = APIRouter(tags=["enrollment"])
 
@@ -16,7 +16,7 @@ router = APIRouter(tags=["enrollment"])
 async def enroll_person(
     name: str = Form(...),
     files: List[UploadFile] = File(...),
-    face_system: FaceRecognitionSystem = Depends(get_face_system),
+    face_system: FaceRecognitionSystemDB = Depends(get_face_system),
 ) -> dict[str, object]:
     """Enroll a person with one or more face images."""
     if not files:
@@ -65,7 +65,7 @@ async def enroll_person(
 @router.delete("/delete/{name}")
 def delete_person(
     name: str,
-    face_system: FaceRecognitionSystem = Depends(get_face_system),
+    face_system: FaceRecognitionSystemDB = Depends(get_face_system),
 ) -> dict[str, object]:
     """Delete a specific person's enrollment data."""
     success = face_system.delete_person(name)
@@ -80,7 +80,7 @@ def delete_person(
 
 @router.delete("/clear")
 def clear_all_data(
-    face_system: FaceRecognitionSystem = Depends(get_face_system),
+    face_system: FaceRecognitionSystemDB = Depends(get_face_system),
 ) -> dict[str, object]:
     """Clear all enrollment data."""
     face_system.clear_all_data()

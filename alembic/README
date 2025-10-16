@@ -1,0 +1,30 @@
+Generic single-database configuration for Face Recognition System.
+
+## Creating a new migration
+
+```bash
+# Auto-generate migration from model changes
+poetry run alembic revision --autogenerate -m "description of changes"
+
+# Create empty migration
+poetry run alembic revision -m "description of changes"
+```
+
+## Applying migrations
+
+```bash
+# Upgrade to latest version
+poetry run alembic upgrade head
+
+# Upgrade to specific revision
+poetry run alembic upgrade <revision_id>
+
+# Downgrade one version
+poetry run alembic downgrade -1
+
+# Show current revision
+poetry run alembic current
+
+# Show migration history
+poetry run alembic history
+```
