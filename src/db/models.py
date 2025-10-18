@@ -39,7 +39,6 @@ class Person(Base):
 class FaceEmbedding(Base):
     """Face embedding storage model."""
     __tablename__ = 'face_embeddings'
-    
     id = Column(Integer, primary_key=True, index=True)
     person_id = Column(Integer, ForeignKey('persons.id', ondelete='CASCADE'), nullable=False, index=True)
     # Store 512-dimensional embedding as PostgreSQL array
