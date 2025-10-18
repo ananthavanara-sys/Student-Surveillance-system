@@ -2,17 +2,18 @@
 from __future__ import annotations
 
 import csv
+from typing import Optional
 
 from fastapi import APIRouter, Depends
 
 from src.app.dependencies import get_face_system
-from src.face_system import FaceRecognitionSystem
+from src.face_system_db import FaceRecognitionSystemDB
 
 router = APIRouter(tags=["status"])
 
 
 @router.get("/")
-def root(face_system: FaceRecognitionSystem = Depends(get_face_system)) -> dict[str, object]:
+def root(face_system: FaceRecognitionSystemDB = Depends(get_face_system)) -> dict[str, object]:
     """Return API metadata and enrollment count."""
     return {
         "message": "Face Recognition API v2.0",
@@ -21,7 +22,7 @@ def root(face_system: FaceRecognitionSystem = Depends(get_face_system)) -> dict[
 
 
 @router.get("/status")
-def get_status(face_system: FaceRecognitionSystem = Depends(get_face_system)) -> dict[str, object]:
+def get_status(face_system: FaceRecognitionSystemDB = Depends(get_face_system)) -> dict[str, object]:
     """Return current system status and attendance metrics."""
     attendance_stats = face_system.get_attendance_stats()
     return {
@@ -33,13 +34,13 @@ def get_status(face_system: FaceRecognitionSystem = Depends(get_face_system)) ->
 
 
 @router.get("/attendance")
-def get_attendance(face_system: FaceRecognitionSystem = Depends(get_face_system)) -> dict[str, object]:
+def get_attendance(face_system: FaceRecognitionSystemDB = Depends(get_face_system)) -> dict[str, object]:
     """Return attendance statistics aggregations."""
     return face_system.get_attendance_stats()
 
 
 @router.get("/attendance/today")
-def get_today_attendance(face_system: FaceRecognitionSystem = Depends(get_face_system)) -> dict[str, object]:
+def get_today_attendance(face_system: FaceRecognitionSystemDB = Depends(get_face_system)) -> dict[str, object]:
     """Return today's attendance list."""
     today_stats = face_system.get_attendance_stats()
     today = today_stats.get("date") or today_stats.get("today_date")
@@ -55,7 +56,7 @@ def get_today_attendance(face_system: FaceRecognitionSystem = Depends(get_face_s
 
 
 @router.get("/attendance/records")
-def get_attendance_records(face_system: FaceRecognitionSystem = Depends(get_face_system)) -> dict[str, object]:
+def get_attendance_records(face_system: FaceRecognitionSystemDB = Depends(get_face_system)) -> dict[str, object]:
     """Return raw attendance records from the CSV ledger."""
     file_path = face_system.attendance_file
     records: list[dict[str, object]] = []
@@ -83,3 +84,36 @@ def get_attendance_records(face_system: FaceRecognitionSystem = Depends(get_face
                 )
 
     return {"records": records}
+
+
+@router.get("/classes")
+def get_available_classes(face_system: FaceRecognitionSystemDB = Depends(get_face_system)) -> dict[str, object]:
+    """Return list of available classes."""
+    classes = face_system.get_available_classes()
+    return {"classes": classes}
+
+
+@router.get("/sections")
+def get_available_sections(
+    class_name: Optional[str] = None,
+    face_system: FaceRecognitionSystemDB = Depends(get_face_system)
+) -> dict[str, object]:
+    """Return list of available sections, optionally filtered by class."""
+    sections = face_system.get_available_sections(class_name)
+    return {"sections": sections, "class": class_name}
+
+
+@router.post("/filter")
+def set_class_section_filter(
+    class_name: Optional[str] = None,
+    section_name: Optional[str] = None,
+    face_system: FaceRecognitionSystemDB = Depends(get_face_system)
+) -> dict[str, object]:
+    """Set class and section filter for recognition cache."""
+    face_system.set_class_section_filter(class_name, section_name)
+    return {
+        "message": "Filter applied successfully",
+        "class": class_name,
+        "section": section_name,
+        "cached_persons": len(face_system.embeddings_cache)
+    }

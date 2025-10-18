@@ -32,13 +32,13 @@ class FaceRepository:
         """Get all persons."""
         return self.db.query(Person).all()
     
-    def create_person(self, name: str) -> Person:
-        """Create a new person."""
-        person = Person(name=name)
+    def create_person(self, name: str, class_name: Optional[str] = None, section_name: Optional[str] = None) -> Person:
+        """Create a new person with optional class and section."""
+        person = Person(name=name, class_name=class_name, section_name=section_name)
         self.db.add(person)
         self.db.commit()
         self.db.refresh(person)
-        logger.info(f"Created person: {name} (ID: {person.id})")
+        logger.info(f"Created person: {name} (ID: {person.id}, Class: {class_name}, Section: {section_name})")
         return person
     
     def delete_person(self, name: str) -> bool:
@@ -54,6 +54,32 @@ class FaceRepository:
     def get_person_count(self) -> int:
         """Get total number of persons."""
         return self.db.query(Person).count()
+    
+    def get_persons_by_class_section(self, class_name: Optional[str] = None, section_name: Optional[str] = None) -> List[Person]:
+        """Get persons filtered by class and/or section."""
+        query = self.db.query(Person)
+        
+        if class_name:
+            query = query.filter(Person.class_name == class_name)
+        if section_name:
+            query = query.filter(Person.section_name == section_name)
+        
+        return query.all()
+    
+    def get_available_classes(self) -> List[str]:
+        """Get list of unique classes."""
+        results = self.db.query(Person.class_name).filter(Person.class_name.isnot(None)).distinct().all()
+        return sorted([cls for (cls,) in results if cls])
+    
+    def get_available_sections(self, class_name: Optional[str] = None) -> List[str]:
+        """Get list of unique sections, optionally filtered by class."""
+        query = self.db.query(Person.section_name).filter(Person.section_name.isnot(None))
+        
+        if class_name:
+            query = query.filter(Person.class_name == class_name)
+        
+        results = query.distinct().all()
+        return sorted([sec for (sec,) in results if sec])
     
     # ==================== Embedding Operations ====================
     
@@ -90,12 +116,16 @@ class FaceRepository:
             .all()
         )
     
-    def get_all_embeddings(self) -> Dict[str, List[Dict]]:
+    def get_all_embeddings(self, class_name: Optional[str] = None, section_name: Optional[str] = None) -> Dict[str, List[Dict]]:
         """
-        Get all embeddings organized by person name.
+        Get all embeddings organized by person name, optionally filtered by class/section.
         Returns dict: {person_name: [embedding_data, ...]}
         """
-        persons = self.get_all_persons()
+        if class_name or section_name:
+            persons = self.get_persons_by_class_section(class_name, section_name)
+        else:
+            persons = self.get_all_persons()
+        
         embeddings_db = {}
         
         for person in persons:

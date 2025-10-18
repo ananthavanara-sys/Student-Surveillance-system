@@ -523,6 +523,33 @@ def _render_ui() -> str:
             <div class="section">
                 <div class="section-header">
                     <div>
+                        <h3>🎯 Class & Section Filter</h3>
+                        <p>Select class and section to load specific student data into recognition cache for optimized performance.</p>
+                    </div>
+                </div>
+                <div class="table-controls">
+                    <div class="control">
+                        <label for="classFilter">Select Class</label>
+                        <select id="classFilter" onchange="onClassFilterChange()">
+                            <option value="">All Classes</option>
+                        </select>
+                    </div>
+                    <div class="control">
+                        <label for="sectionFilter">Select Section</label>
+                        <select id="sectionFilter" onchange="onSectionFilterChange()">
+                            <option value="">All Sections</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 12px;">
+                    <button onclick="applyFilter()">Apply Filter</button>
+                    <button class="secondary" onclick="clearFilter()">Clear Filter</button>
+                </div>
+                <div id="filterResult" class="info-block" style="margin-top: 12px; display: none;"></div>
+            </div>
+            <div class="section">
+                <div class="section-header">
+                    <div>
                         <h3>System Status Console</h3>
                         <p>Live system metrics, attendance summaries, and export utilities.</p>
                     </div>
@@ -553,6 +580,14 @@ def _render_ui() -> str:
                 </div>
                 <div class="control-row">
                     <input type="text" id="enrollName" placeholder="Enter name to enroll">
+                    <select id="enrollClass">
+                        <option value="">Class (Optional)</option>
+                    </select>
+                    <select id="enrollSection">
+                        <option value="">Section (Optional)</option>
+                    </select>
+                </div>
+                <div class="control-row">
                     <button onclick="enrollFromWebcam()">Quick Enroll (1 Photo)</button>
                     <button onclick="enrollGuidedFromWebcam()">Guided Enroll (15 Photos - Best Accuracy)</button>
                     <button onclick="startRecognition()">Start Recognition</button>
@@ -576,6 +611,14 @@ def _render_ui() -> str:
                 <div class="control-row">
                     <input type="file" id="imageFile" accept="image/*" multiple>
                     <input type="text" id="uploadName" placeholder="Name (for enrollment)">
+                </div>
+                <div class="control-row">
+                    <select id="uploadClass">
+                        <option value="">Class (Optional)</option>
+                    </select>
+                    <select id="uploadSection">
+                        <option value="">Section (Optional)</option>
+                    </select>
                     <button onclick="enrollFromFile()">Enroll from Files</button>
                     <button class="secondary" onclick="recognizeFromFile()">Recognize from File</button>
                 </div>
@@ -1163,7 +1206,276 @@ def _render_ui() -> str:
 
                 fetchAttendanceRecords();
             }
-            window.onload = initWebcam;
+            // ==================== Class/Section Filter Functions ====================
+            async function loadAvailableClasses() {
+                try {
+                    const response = await fetch(`${API_BASE}/classes`);
+                    const data = await response.json();
+                    const classFilter = document.getElementById('classFilter');
+                    const enrollClass = document.getElementById('enrollClass');
+                    const uploadClass = document.getElementById('uploadClass');
+                    
+                    // Populate all class dropdowns
+                    [classFilter, enrollClass, uploadClass].forEach(select => {
+                        if (select) {
+                            data.classes.forEach(cls => {
+                                const option = document.createElement('option');
+                                option.value = cls;
+                                option.textContent = cls;
+                                select.appendChild(option);
+                            });
+                        }
+                    });
+                } catch (error) {
+                    console.error('Failed to load classes:', error);
+                }
+            }
+            
+            async function loadAvailableSections(className = null) {
+                try {
+                    const url = className ? `${API_BASE}/sections?class_name=${encodeURIComponent(className)}` : `${API_BASE}/sections`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    const sectionFilter = document.getElementById('sectionFilter');
+                    const enrollSection = document.getElementById('enrollSection');
+                    const uploadSection = document.getElementById('uploadSection');
+                    
+                    // Populate all section dropdowns
+                    [sectionFilter, enrollSection, uploadSection].forEach(select => {
+                        if (select) {
+                            // Clear existing options except first
+                            while (select.options.length > 1) {
+                                select.remove(1);
+                            }
+                            data.sections.forEach(sec => {
+                                const option = document.createElement('option');
+                                option.value = sec;
+                                option.textContent = sec;
+                                select.appendChild(option);
+                            });
+                        }
+                    });
+                } catch (error) {
+                    console.error('Failed to load sections:', error);
+                }
+            }
+            
+            function onClassFilterChange() {
+                const className = document.getElementById('classFilter').value;
+                loadAvailableSections(className);
+            }
+            
+            function onSectionFilterChange() {
+                // Optional: could add logic here if needed
+            }
+            
+            async function applyFilter() {
+                const className = document.getElementById('classFilter').value || null;
+                const sectionName = document.getElementById('sectionFilter').value || null;
+                const resultDiv = document.getElementById('filterResult');
+                
+                try {
+                    const params = new URLSearchParams();
+                    if (className) params.append('class_name', className);
+                    if (sectionName) params.append('section_name', sectionName);
+                    
+                    const response = await fetch(`${API_BASE}/filter?${params.toString()}`, { method: 'POST' });
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        let filterDesc = className ? `Class: ${className}` : 'All Classes';
+                        if (sectionName) filterDesc += `, Section: ${sectionName}`;
+                        
+                        resultDiv.innerHTML = `<div class="success">
+                            ✅ ${data.message}<br>
+                            <strong>Filter:</strong> ${filterDesc}<br>
+                            <strong>Cached Students:</strong> ${data.cached_persons}
+                        </div>`;
+                        resultDiv.style.display = 'block';
+                        getStatus(); // Refresh status
+                    } else {
+                        resultDiv.innerHTML = `<div class="error">Failed to apply filter</div>`;
+                        resultDiv.style.display = 'block';
+                    }
+                } catch (error) {
+                    resultDiv.innerHTML = `<div class="error">Error applying filter: ${error.message}</div>`;
+                    resultDiv.style.display = 'block';
+                }
+            }
+            
+            async function clearFilter() {
+                document.getElementById('classFilter').value = '';
+                document.getElementById('sectionFilter').value = '';
+                await applyFilter();
+            }
+            
+            // Update enrollment functions to include class/section
+            async function enrollFromWebcam() {
+                const name = document.getElementById('enrollName').value.trim();
+                const className = document.getElementById('enrollClass').value || null;
+                const sectionName = document.getElementById('enrollSection').value || null;
+                
+                if (!name) {
+                    alert('Please enter a name');
+                    return;
+                }
+                const blob = await captureFrame();
+                const formData = new FormData();
+                formData.append('name', name);
+                if (className) formData.append('class_name', className);
+                if (sectionName) formData.append('section_name', sectionName);
+                formData.append('files', blob, 'webcam.jpg');
+                try {
+                    const response = await fetch(`${API_BASE}/enroll`, { method: 'POST', body: formData });
+                    const data = await response.json();
+                    if (response.ok) {
+                        let msg = data.message;
+                        if (data.class) msg += `<br>Class: ${data.class}`;
+                        if (data.section) msg += `, Section: ${data.section}`;
+                        document.getElementById('webcamResult').innerHTML = `<div class="success">${msg}</div>`;
+                        getStatus();
+                    } else {
+                        document.getElementById('webcamResult').innerHTML = `<div class="error">${data.detail}</div>`;
+                    }
+                } catch (err) {
+                    document.getElementById('webcamResult').innerHTML = '<div class="error">Enrollment failed</div>';
+                }
+            }
+            
+            async function enrollGuidedFromWebcam() {
+                const name = document.getElementById('enrollName').value.trim();
+                const className = document.getElementById('enrollClass').value || null;
+                const sectionName = document.getElementById('enrollSection').value || null;
+                
+                if (!name) {
+                    alert('Please enter a name');
+                    return;
+                }
+                const progressDiv = document.getElementById('enrollmentProgress');
+                const progressFill = document.getElementById('progressFill');
+                const guidanceText = document.getElementById('guidanceText');
+                const resultDiv = document.getElementById('webcamResult');
+                progressDiv.style.display = 'block';
+                resultDiv.innerHTML = '';
+                const formData = new FormData();
+                formData.append('name', name);
+                if (className) formData.append('class_name', className);
+                if (sectionName) formData.append('section_name', sectionName);
+                const poses = [
+                    { instruction: "Look straight at the camera", duration: 2000, count: 3 },
+                    { instruction: "Turn your head slightly LEFT", duration: 1500, count: 2 },
+                    { instruction: "Turn your head slightly RIGHT", duration: 1500, count: 2 },
+                    { instruction: "Look straight again", duration: 1500, count: 2 },
+                    { instruction: "Tilt your head slightly UP", duration: 1500, count: 2 },
+                    { instruction: "Tilt your head slightly DOWN", duration: 1500, count: 2 },
+                    { instruction: "Look straight - final shots", duration: 2000, count: 2 }
+                ];
+                let totalPhotos = 0;
+                const targetPhotos = 15;
+                try {
+                    for (const pose of poses) {
+                        guidanceText.innerHTML = `${pose.instruction}`;
+                        guidanceText.className = 'guidance info';
+                        await new Promise(resolve => setTimeout(resolve, 800));
+                        for (let i = 0; i < pose.count; i++) {
+                            for (let countdown = 3; countdown > 0; countdown--) {
+                                guidanceText.innerHTML = `${pose.instruction}<br>📸 ${countdown}...`;
+                                await new Promise(resolve => setTimeout(resolve, 300));
+                            }
+                            guidanceText.innerHTML = `${pose.instruction}<br>📸 CLICK!`;
+                            guidanceText.className = 'guidance success';
+                            const blob = await captureFrame();
+                            formData.append('files', blob, `guided_${totalPhotos}.jpg`);
+                            totalPhotos++;
+                            const progress = (totalPhotos / targetPhotos) * 100;
+                            progressFill.style.width = `${progress}%`;
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                            if (i < pose.count - 1) {
+                                guidanceText.innerHTML = `${pose.instruction}<br>Hold position...`;
+                                guidanceText.className = 'guidance warning';
+                                await new Promise(resolve => setTimeout(resolve, 800));
+                            }
+                        }
+                    }
+                    guidanceText.innerHTML = '🔄 Processing your enrollment...';
+                    guidanceText.className = 'guidance info';
+                    const response = await fetch(`${API_BASE}/enroll`, { method: 'POST', body: formData });
+                    const data = await response.json();
+                    if (response.ok) {
+                        guidanceText.innerHTML = '✅ Enrollment Complete!';
+                        guidanceText.className = 'guidance success';
+                        let msg = `<strong>${data.message}</strong><br>
+                            📊 Quality Score: ${(data.avg_quality * 100).toFixed(1)}%<br>
+                            📸 Photos Used: ${data.successful_enrollments}/${totalPhotos}<br>
+                            🎯 Total Embeddings: ${data.total_embeddings}`;
+                        if (data.class) msg += `<br>📚 Class: ${data.class}`;
+                        if (data.section) msg += `, Section: ${data.section}`;
+                        resultDiv.innerHTML = `<div class="success">${msg}</div>`;
+                        getStatus();
+                    } else {
+                        throw new Error(data.detail);
+                    }
+                } catch (err) {
+                    guidanceText.innerHTML = '❌ Enrollment Failed';
+                    guidanceText.className = 'guidance error';
+                    resultDiv.innerHTML = `<div class="error">${err.message || 'Enrollment failed'}</div>`;
+                }
+                setTimeout(() => {
+                    progressDiv.style.display = 'none';
+                }, 3000);
+            }
+            
+            async function enrollFromFile() {
+                const fileInput = document.getElementById('imageFile');
+                const name = document.getElementById('uploadName').value.trim();
+                const className = document.getElementById('uploadClass').value || null;
+                const sectionName = document.getElementById('uploadSection').value || null;
+                
+                if (!fileInput.files.length) {
+                    alert('Please select at least one image');
+                    return;
+                }
+                if (!name) {
+                    alert('Please enter a name');
+                    return;
+                }
+                const formData = new FormData();
+                formData.append('name', name);
+                if (className) formData.append('class_name', className);
+                if (sectionName) formData.append('section_name', sectionName);
+                for (const file of fileInput.files) {
+                    formData.append('files', file);
+                }
+                try {
+                    const response = await fetch(`${API_BASE}/enroll`, { method: 'POST', body: formData });
+                    const data = await response.json();
+                    if (response.ok) {
+                        let message = data.message;
+                        if (data.avg_quality) {
+                            message += `<br>Quality Score: ${data.avg_quality}`;
+                        }
+                        if (data.class) message += `<br>Class: ${data.class}`;
+                        if (data.section) message += `, Section: ${data.section}`;
+                        document.getElementById('uploadResult').innerHTML = `<div class="success">${message}</div>`;
+                        getStatus();
+                    } else {
+                        document.getElementById('uploadResult').innerHTML = `<div class="error">${data.detail}</div>`;
+                    }
+                } catch (err) {
+                    document.getElementById('uploadResult').innerHTML = '<div class="error">Enrollment failed</div>';
+                }
+            }
+            
+            // Initialize class/section dropdowns on page load
+            async function initClassSectionFilters() {
+                await loadAvailableClasses();
+                await loadAvailableSections();
+            }
+            
+            window.onload = function() {
+                initWebcam();
+                initClassSectionFilters();
+            };
             window.addEventListener('load', initAttendanceControls);
         </script>
     </body>

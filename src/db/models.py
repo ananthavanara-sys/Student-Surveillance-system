@@ -15,6 +15,8 @@ class Person(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), unique=True, nullable=False, index=True)
+    class_name = Column(String(50), nullable=True, index=True)  # e.g., "1st", "2nd", ..., "12th"
+    section_name = Column(String(10), nullable=True, index=True)  # e.g., "A", "B", "C", "D"
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     
@@ -33,7 +35,7 @@ class Person(Base):
     )
     
     def __repr__(self) -> str:
-        return f"<Person(id={self.id}, name='{self.name}')>"
+        return f"<Person(id={self.id}, name='{self.name}', class={self.class_name}, section={self.section_name})>"
 
 
 class FaceEmbedding(Base):

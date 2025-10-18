@@ -18,12 +18,14 @@ logger = logging.getLogger(__name__)
 class FaceRecognitionSystemDB:
     """Face recognition system with PostgreSQL backend."""
     
-    def __init__(self, use_db: bool = True):
+    def __init__(self, use_db: bool = True, class_name: Optional[str] = None, section_name: Optional[str] = None):
         """
         Initialize face recognition system.
         
         Args:
             use_db: Whether to use database (True) or file-based storage (False)
+            class_name: Optional class filter for cache loading
+            section_name: Optional section filter for cache loading
         """
         # Initialize InsightFace with high-quality settings
         self.app = FaceAnalysis(
@@ -36,6 +38,10 @@ class FaceRecognitionSystemDB:
         # Database mode flag
         self.use_db = use_db
         
+        # Class/Section filters
+        self.current_class_filter = class_name
+        self.current_section_filter = section_name
+        
         # In-memory cache for embeddings (loaded from DB)
         self.embeddings_cache: Dict[str, List[Dict]] = {}
         
@@ -45,20 +51,61 @@ class FaceRecognitionSystemDB:
         
         # Load embeddings from database into cache
         if self.use_db:
-            self._load_embeddings_from_db()
+            self._load_embeddings_from_db(class_name, section_name)
         
-        logger.info(f"FaceRecognitionSystemDB initialized (database_mode={use_db})")
+        logger.info(f"FaceRecognitionSystemDB initialized (database_mode={use_db}, class={class_name}, section={section_name})")
     
-    def _load_embeddings_from_db(self):
-        """Load all embeddings from database into memory cache."""
+    def _load_embeddings_from_db(self, class_name: Optional[str] = None, section_name: Optional[str] = None):
+        """Load embeddings from database into memory cache with optional class/section filtering."""
         try:
             with get_db_context() as db:
                 repo = FaceRepository(db)
-                self.embeddings_cache = repo.get_all_embeddings()
-            logger.info(f"Loaded {len(self.embeddings_cache)} persons from database")
+                self.embeddings_cache = repo.get_all_embeddings(class_name, section_name)
+            
+            filter_desc = []
+            if class_name:
+                filter_desc.append(f"class={class_name}")
+            if section_name:
+                filter_desc.append(f"section={section_name}")
+            filter_str = " " + ", ".join(filter_desc) if filter_desc else ""
+            
+            logger.info(f"Loaded {len(self.embeddings_cache)} persons from database{filter_str}")
         except Exception as e:
             logger.error(f"Failed to load embeddings from database: {e}")
             self.embeddings_cache = {}
+    
+    def set_class_section_filter(self, class_name: Optional[str] = None, section_name: Optional[str] = None):
+        """Update class/section filter and reload cache accordingly."""
+        self.current_class_filter = class_name
+        self.current_section_filter = section_name
+        
+        if self.use_db:
+            self._load_embeddings_from_db(class_name, section_name)
+            logger.info(f"Cache reloaded with filter: class={class_name}, section={section_name}")
+    
+    def get_available_classes(self) -> List[str]:
+        """Get list of available classes from database."""
+        if self.use_db:
+            try:
+                with get_db_context() as db:
+                    repo = FaceRepository(db)
+                    return repo.get_available_classes()
+            except Exception as e:
+                logger.error(f"Failed to get available classes: {e}")
+                return []
+        return []
+    
+    def get_available_sections(self, class_name: Optional[str] = None) -> List[str]:
+        """Get list of available sections, optionally filtered by class."""
+        if self.use_db:
+            try:
+                with get_db_context() as db:
+                    repo = FaceRepository(db)
+                    return repo.get_available_sections(class_name)
+            except Exception as e:
+                logger.error(f"Failed to get available sections: {e}")
+                return []
+        return []
     
     def _refresh_person_cache(self, person_name: str):
         """Refresh cache for a specific person."""
@@ -156,10 +203,16 @@ class FaceRecognitionSystemDB:
         quality = (size_score * 0.3 + det_score * 0.3 + pose_score * 0.2 + sharpness_score * 0.2)
         return float(quality)
     
-    def enroll_person(self, name: str, image: np.ndarray) -> bool:
+    def enroll_person(self, name: str, image: np.ndarray, class_name: Optional[str] = None, section_name: Optional[str] = None) -> bool:
         """
         Enroll a person by extracting their face embedding with quality filtering.
         Stores in database if use_db=True.
+        
+        Args:
+            name: Person's name
+            image: Face image
+            class_name: Optional class (e.g., "1st", "2nd", "12th")
+            section_name: Optional section (e.g., "A", "B", "C")
         """
         faces = self.detect_and_extract(image)
         
@@ -183,7 +236,7 @@ class FaceRecognitionSystemDB:
                     # Get or create person
                     person = repo.get_person_by_name(name)
                     if not person:
-                        person = repo.create_person(name)
+                        person = repo.create_person(name, class_name, section_name)
                     
                     # Add embedding
                     repo.add_embedding(
@@ -220,13 +273,13 @@ class FaceRecognitionSystemDB:
             self.embeddings_cache[name] = self.embeddings_cache[name][:self.max_embeddings_per_person]
             return True
     
-    def enroll_multiple_images(self, name: str, images: List[np.ndarray]) -> Dict:
+    def enroll_multiple_images(self, name: str, images: List[np.ndarray], class_name: Optional[str] = None, section_name: Optional[str] = None) -> Dict:
         """Enroll person from multiple images for better accuracy."""
         successful_enrollments = 0
         total_quality = 0.0
         
         for image in images:
-            if self.enroll_person(name, image):
+            if self.enroll_person(name, image, class_name, section_name):
                 successful_enrollments += 1
                 # Get the quality of the last enrolled embedding
                 if name in self.embeddings_cache and self.embeddings_cache[name]:

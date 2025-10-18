@@ -16,9 +16,11 @@ router = APIRouter(tags=["enrollment"])
 async def enroll_person(
     name: str = Form(...),
     files: List[UploadFile] = File(...),
+    class_name: str = Form(None),
+    section_name: str = Form(None),
     face_system: FaceRecognitionSystemDB = Depends(get_face_system),
 ) -> dict[str, object]:
-    """Enroll a person with one or more face images."""
+    """Enroll a person with one or more face images, optionally with class and section."""
     if not files:
         raise HTTPException(status_code=400, detail="At least one image file required")
 
@@ -38,7 +40,7 @@ async def enroll_person(
         raise HTTPException(status_code=400, detail="No valid images provided")
 
     if len(images) == 1:
-        success = face_system.enroll_person(name, images[0])
+        success = face_system.enroll_person(name, images[0], class_name, section_name)
         if not success:
             raise HTTPException(status_code=400, detail="No face detected in image")
 
@@ -46,9 +48,11 @@ async def enroll_person(
             "message": f"Successfully enrolled {name}",
             "total_enrolled": face_system.get_enrolled_count(),
             "images_processed": 1,
+            "class": class_name,
+            "section": section_name,
         }
 
-    result = face_system.enroll_multiple_images(name, images)
+    result = face_system.enroll_multiple_images(name, images, class_name, section_name)
     if not result["success"]:
         raise HTTPException(status_code=400, detail="No faces detected in any images")
 
@@ -59,6 +63,8 @@ async def enroll_person(
         "successful_enrollments": result["enrolled_count"],
         "total_embeddings": result["total_embeddings"],
         "avg_quality": round(result["avg_quality"], 3),
+        "class": class_name,
+        "section": section_name,
     }
 
 
